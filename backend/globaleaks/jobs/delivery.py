@@ -13,8 +13,8 @@ from globaleaks import models
 from globaleaks.jobs.base import LoopingJob
 from globaleaks.orm import transact
 from globaleaks.utils.pgp import PGPContext
-from globaleaks.utils.securetempfile import SecureFile
-from globaleaks.utils.security import generateRandomKey
+from globaleaks.utils.securetempfile import SecureTemporaryFileRead
+from globaleaks.utils.security import generateRandomKey, overwrite_and_remove
 from globaleaks.settings import Settings
 from globaleaks.utils.utility import log
 
@@ -111,7 +111,7 @@ def fsops_pgp_encrypt(state, fpath, key, fingerprint):
 
     filepath = os.path.join(state.settings.attachments_path, fpath)
 
-    with SecureFile(filepath) as f:
+    with SecureTemporaryFileRead(filepath, state.settings.ramdisk_path) as f:
         encrypted_file_path = os.path.join(os.path.abspath(state.settings.attachments_path), "pgp_encrypted-%s" % generateRandomKey(16))
         _, encrypted_file_size = pgpctx.encrypt_file(fingerprint, f, encrypted_file_path)
 
@@ -160,17 +160,11 @@ def process_files(state, receiverfiles_maps):
                       ifile_path, plain_path)
 
             try:
-                with open(plain_path, "wb") as plaintext_f, SecureFile(ifile_path) as encrypted_file:
-                    chunk_size = 4096
-                    written_size = 0
+                with open(plain_path, "wb") as plaintext_f, SecureTemporaryFileRead(ifile_path, state.settings.ramdisk_path) as encrypted_file:
                     while True:
-                        chunk = encrypted_file.read(chunk_size)
+                        chunk = encrypted_file.read(4096)
                         if not chunk:
-                            if written_size != receiverfiles_map['ifile_size']:
-                                log.err("Integrity error on rfile write for ifile %s; ifile_size(%d), rfile_size(%d)",
-                                        ifile_id, receiverfiles_map['ifile_size'], written_size)
                             break
-                        written_size += len(chunk)
                         plaintext_f.write(chunk)
 
                 receiverfiles_map['ifile_path'] = plain_path
@@ -184,13 +178,13 @@ def process_files(state, receiverfiles_maps):
 
         # Remove the AES file
         try:
-            os.remove(ifile_path)
+            overwrite_and_remove(ifile_path)
         except OSError as ose:
             log.err("Unable to remove %s: %s", ifile_path, ose.strerror)
 
         # Remove the AES file key
         try:
-            os.remove(os.path.join(state.settings.ramdisk_path, ("%s%s" % (state.settings.AES_keyfile_prefix, ifile_name))))
+            overwrite_and_remove(os.path.join(state.settings.ramdisk_path, ("%s%s" % (state.settings.AES_keyfile_prefix, ifile_name))))
         except OSError as ose:
             log.err("Unable to remove keyfile associated with %s: %s", ifile_path, ose.strerror)
 

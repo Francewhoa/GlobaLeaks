@@ -46,9 +46,6 @@ class SubmissionAttachment(BaseHandler):
 
     @inlineCallbacks
     def handle_attachment(self):
-        self.uploaded_file['body'].avoid_delete()
-        self.uploaded_file['body'].close()
-
         dst = os.path.join(Settings.attachments_path,
                            os.path.basename(self.uploaded_file['path']))
 
@@ -77,8 +74,8 @@ class PostSubmissionAttachment(SubmissionAttachment):
     @inlineCallbacks
     def post(self):
         itip_id = (yield models.get(models.InternalTip.id,
-                                   models.InternalTip.id==self.current_user.user_id,
-                                   models.InternalTip.tid==self.request.tid))[0]
+                                    models.InternalTip.id==self.current_user.user_id,
+                                    models.InternalTip.tid==self.request.tid))[0]
 
         yield self.handle_attachment()
 

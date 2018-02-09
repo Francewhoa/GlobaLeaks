@@ -9,6 +9,7 @@ import base64
 from globaleaks import models
 from globaleaks.handlers.base import BaseHandler
 from globaleaks.orm import transact
+from globaleaks.utils.securetempfile import SecureTemporaryFileRead
 
 model_map = {
   'users': models.UserImg,
@@ -56,7 +57,10 @@ class ModelImgInstance(BaseHandler):
         # The error is suppressed here because add_model_img is wrapped with a
         # transact returns a deferred which we attach events to.
         # pylint: disable=assignment-from-no-return
-        return add_model_img(self.request.tid, obj_key, obj_id, self.uploaded_file['body'].read())
+        with SecureTemporaryFileRead(self.uploaded_file['path'], self.state.settings.ramdisk_path) as encrypted_file:
+            data = encrypted_file.read()
+
+        return add_model_img(self.request.tid, obj_key, obj_id, data)
 
     def delete(self, obj_key, obj_id):
         return del_model_img(self.request.tid, obj_key, obj_id)

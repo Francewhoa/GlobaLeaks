@@ -17,7 +17,7 @@ from twisted.internet.defer import inlineCallbacks
 
 from globaleaks.event import track_handler
 from globaleaks.rest import errors, requests
-from globaleaks.utils.securetempfile import SecureTemporaryFile
+from globaleaks.utils.securetempfile import SecureTemporaryFileRead, SecureTemporaryFileWrite
 from globaleaks.utils.security import generateRandomKey, sha512
 from globaleaks.settings import Settings
 from globaleaks.utils.tempdict import TempDict
@@ -441,15 +441,18 @@ class BaseHandler(object):
 
         if flow_identifier not in self.state.TempUploadFiles:
             self.state.check_ramdisk()
-            self.state.TempUploadFiles.set(flow_identifier, SecureTemporaryFile(Settings.tmp_upload_path))
+            self.state.TempUploadFiles.set(flow_identifier, SecureTemporaryFileWrite(Settings.tmp_upload_path, Settings.ramdisk_path))
 
-        f = self.state.TempUploadFiles.get(flow_identifier)
+        f = self.state.TempUploadFiles[flow_identifier]
         f.write(self.request.args['file'][0])
 
         if self.request.args['flowChunkNumber'][0] != self.request.args['flowTotalChunks'][0]:
+            f.close()
             return None
 
+        f = self.state.TempUploadFiles.pop(flow_identifier)
         f.finalize()
+        f.close()
 
         mime_type, _ = mimetypes.guess_type(self.request.args['flowFilename'][0])
         if mime_type is None:
@@ -488,19 +491,16 @@ class BaseHandler(object):
         @return: a descriptor dictionary for the saved file
         """
         try:
-            if os.path.exists(destination):
-                log.err('Overwriting file %s with %d bytes', destination, self.uploaded_file['size'])
-            else:
-                log.debug('Creating file %s with %d bytes', destination, self.uploaded_file['size'])
+            log.debug('Creating file %s with %d bytes', destination, self.uploaded_file['size'])
 
-            with open(destination, 'w+') as fd:
-                self.uploaded_file['body'].seek(0, 0)
-                data = self.uploaded_file['body'].read(4000)
-                while data:
-                    os.write(fd.fileno(), data)
-                    data = self.uploaded_file['body'].read(4000)
+            with open(destination, "w+") as plaintext_f, SecureTemporaryFileRead(self.uploaded_file['path'], self.state.settings.ramdisk_path) as encrypted_file:
+                while True:
+                    chunk = encrypted_file.read(4096)
+                    if not chunk:
+                        break
+                    plaintext_f.write(chunk)
+
         finally:
-            self.uploaded_file['body'].close()
             self.uploaded_file['path'] = destination
 
     @inlineCallbacks

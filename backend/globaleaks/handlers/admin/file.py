@@ -12,6 +12,7 @@ from twisted.internet import threads
 from globaleaks import models
 from globaleaks.handlers.base import BaseHandler
 from globaleaks.orm import transact
+from globaleaks.utils.securetempfile import SecureTemporaryFileRead
 from globaleaks.utils.security import directory_traversal_check
 from globaleaks.utils.utility import uuid4
 
@@ -69,7 +70,9 @@ class FileInstance(BaseHandler):
 
     def post(self, id):
         if id != 'custom':
-            data = self.uploaded_file['body'].read()
+            with SecureTemporaryFileRead(self.uploaded_file['path'], self.state.settings.ramdisk_path) as encrypted_file:
+                data = encrypted_file.read()
+
             data = base64.b64encode(data)
             d = add_file(self.request.tid, id, u'', data)
         else:

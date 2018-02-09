@@ -30,7 +30,7 @@ from globaleaks.rest import errors
 from globaleaks.settings import Settings
 from globaleaks.state import State
 from globaleaks.utils import security, tempdict, token, utility
-from globaleaks.utils.securetempfile import SecureTemporaryFile
+from globaleaks.utils.securetempfile import SecureTemporaryFileWrite
 from globaleaks.utils.objectdict import ObjectDict
 from globaleaks.utils.structures import fill_localized_keys
 from globaleaks.utils.utility import datetime_null, datetime_now, datetime_to_ISO8601, \
@@ -216,9 +216,11 @@ def get_dummy_file(filename=None, content_type=None, content=None):
 
     content = base64.b64decode(VALID_BASE64_IMG)
 
-    temporary_file = SecureTemporaryFile(Settings.tmp_upload_path)
+    temporary_file = SecureTemporaryFileWrite(Settings.tmp_upload_path, Settings.ramdisk_path)
 
     temporary_file.write(content)
+
+    temporary_file.close()
 
     return {
         'date': datetime_now(),
@@ -526,9 +528,6 @@ class TestGL(unittest.TestCase):
         """
         for _ in range(n):
             dummyFile = self.get_dummy_file()
-
-            dummyFile['body'].avoid_delete()
-            dummyFile['body'].close()
 
             dst = os.path.join(Settings.attachments_path,
                                os.path.basename(dummyFile['path']))

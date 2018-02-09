@@ -129,8 +129,16 @@ class Cleaning(LoopingJob):
             yield self.commit_files_deletion(files_to_delete)
 
         # Delete the outdated AES keys older than 1 day
-        aes_keys_to_remove = [f for f in os.listdir(self.state.settings.ramdisk_path) if fnmatch.fnmatch(f, 'aeskey-*')]
-        for f in aes_keys_to_remove:
+        files_to_remove = [f for f in os.listdir(self.state.settings.attachments_path) if fnmatch.fnmatch(f, '*.aes')]
+        for f in files_to_remove:
+            path = os.path.join(self.state.settings.attachments_path, f)
+            timestamp = datetime.datetime.fromtimestamp(os.path.getmtime(path))
+            if is_expired(timestamp, days=1):
+                overwrite_and_remove(path)
+
+        # Delete the outdated AES keys older than 1 day
+        files_to_remove = [f for f in os.listdir(self.state.settings.ramdisk_path) if fnmatch.fnmatch(f, 'aeskey-*')]
+        for f in files_to_remove:
             path = os.path.join(self.state.settings.ramdisk_path, f)
             timestamp = datetime.datetime.fromtimestamp(os.path.getmtime(path))
             if is_expired(timestamp, days=1):
